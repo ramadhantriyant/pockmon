@@ -289,10 +289,11 @@ func (h *Handler) DeleteCategory(c *gin.Context) {
 		return
 	}
 
-	if err := h.config.Querier.DeleteCategory(c.Request.Context(), database.DeleteCategoryParams{
+	params := database.DeleteCategoryParams{
 		ID:     categoryID,
 		UserID: user.ID,
-	}); err != nil {
+	}
+	if err := h.config.Querier.DeleteCategory(c.Request.Context(), params); err != nil {
 		c.Error(&gin.Error{
 			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,

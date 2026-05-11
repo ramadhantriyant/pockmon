@@ -271,7 +271,7 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 		return
 	}
 
-	var newTransaction struct {
+	var req struct {
 		AccountID              string   `json:"account_id" binding:"required"`
 		CategoryID             string   `json:"category_id" binding:"required"`
 		Type                   string   `json:"type" binding:"required,oneof=income expense"`
@@ -286,7 +286,7 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 		IsRecurring            *bool    `json:"is_recurring"`
 		RecurringTransactionID *string  `json:"recurring_transaction_id"`
 	}
-	if err := c.ShouldBindJSON(&newTransaction); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Error(&gin.Error{
 			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid request body"),
 			Type: gin.ErrorTypePublic,
@@ -305,7 +305,7 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 		return
 	}
 
-	accountID, err := util.GetUUID(newTransaction.AccountID)
+	accountID, err := util.GetUUID(req.AccountID)
 	if err != nil {
 		c.Error(&gin.Error{
 			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid account id"),
@@ -315,7 +315,7 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 		return
 	}
 
-	categoryID, err := util.GetUUID(newTransaction.CategoryID)
+	categoryID, err := util.GetUUID(req.CategoryID)
 	if err != nil {
 		c.Error(&gin.Error{
 			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid category id"),
@@ -366,7 +366,7 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 		return
 	}
 
-	amount, err := util.GetNumeric(newTransaction.Amount)
+	amount, err := util.GetNumeric(req.Amount)
 	if err != nil {
 		c.Error(&gin.Error{
 			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid amount").WithInternal(err.Error()),
@@ -376,7 +376,7 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 		return
 	}
 
-	transactionDate, err := util.GetDate(newTransaction.TransactionDate)
+	transactionDate, err := util.GetDate(req.TransactionDate)
 	if err != nil {
 		c.Error(&gin.Error{
 			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid transaction date").WithInternal(err.Error()),
@@ -391,20 +391,20 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 		UserID:          user.ID,
 		AccountID:       accountID,
 		CategoryID:      categoryID,
-		Type:            newTransaction.Type,
+		Type:            req.Type,
 		Amount:          amount,
-		CurrencyCode:    newTransaction.CurrencyCode,
+		CurrencyCode:    req.CurrencyCode,
 		TransactionDate: transactionDate,
-		Description:     newTransaction.Description,
-		Notes:           newTransaction.Notes,
-		Payee:           newTransaction.Payee,
-		Location:        newTransaction.Location,
-		Tags:            newTransaction.Tags,
-		IsRecurring:     newTransaction.IsRecurring,
+		Description:     req.Description,
+		Notes:           req.Notes,
+		Payee:           req.Payee,
+		Location:        req.Location,
+		Tags:            req.Tags,
+		IsRecurring:     req.IsRecurring,
 	}
 
-	if newTransaction.RecurringTransactionID != nil {
-		recurringID, err := util.GetUUID(*newTransaction.RecurringTransactionID)
+	if req.RecurringTransactionID != nil {
+		recurringID, err := util.GetUUID(*req.RecurringTransactionID)
 		if err != nil {
 			c.Error(&gin.Error{
 				Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid recurring transaction id"),
@@ -428,10 +428,10 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 	}
 
 	var newBalFloat float64
-	if newTransaction.Type == "income" {
-		newBalFloat = currentBal.Float64 + newTransaction.Amount
+	if req.Type == "income" {
+		newBalFloat = currentBal.Float64 + req.Amount
 	} else {
-		newBalFloat = currentBal.Float64 - newTransaction.Amount
+		newBalFloat = currentBal.Float64 - req.Amount
 	}
 
 	newBalance, err := util.GetNumeric(newBalFloat)
@@ -495,6 +495,374 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 	})
 }
 
-func (h *Handler) UpdateTransaction(c *gin.Context) {}
+func (h *Handler) UpdateTransaction(c *gin.Context) {
+	token := c.MustGet("firebaseToken").(*auth.Token)
 
-func (h *Handler) DeleteTransaction(c *gin.Context) {}
+	user, err := h.config.Querier.GetUserByFirebaseUID(c.Request.Context(), token.UID)
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	transactionID, err := util.GetUUID(c.Param("id"))
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid transaction id"),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	var req struct {
+		CategoryID      string   `json:"category_id" binding:"required"`
+		Amount          float64  `json:"amount" binding:"required"`
+		TransactionDate string   `json:"transaction_date" binding:"required"`
+		Description     string   `json:"description" binding:"required"`
+		Notes           *string  `json:"notes"`
+		Payee           *string  `json:"payee"`
+		Location        *string  `json:"location"`
+		Tags            []string `json:"tags"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid request body"),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	categoryID, err := util.GetUUID(req.CategoryID)
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid category id"),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	if _, err := h.config.Querier.GetCategoryByIDAndUser(c.Request.Context(), database.GetCategoryByIDAndUserParams{
+		ID:     categoryID,
+		UserID: user.ID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusNotFound, "not found", "category not found"),
+				Type: gin.ErrorTypePublic,
+			})
+		} else {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+				Type: gin.ErrorTypePublic,
+			})
+		}
+		c.Abort()
+		return
+	}
+
+	existing, err := h.config.Querier.GetTransactionByID(c.Request.Context(), database.GetTransactionByIDParams{
+		ID:     transactionID,
+		UserID: user.ID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusNotFound, "not found", "transaction not found"),
+				Type: gin.ErrorTypePublic,
+			})
+		} else {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+				Type: gin.ErrorTypePublic,
+			})
+		}
+		c.Abort()
+		return
+	}
+
+	account, err := h.config.Querier.GetAccountByID(c.Request.Context(), database.GetAccountByIDParams{
+		ID:     existing.AccountID,
+		UserID: user.ID,
+	})
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	amount, err := util.GetNumeric(req.Amount)
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid amount").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	transactionDate, err := util.GetDate(req.TransactionDate)
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid transaction date").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	// Compute new balance: reverse the old amount then apply the new one.
+	// income: balance += amount on create, so new = current - oldAmt + newAmt
+	// expense: balance -= amount on create, so new = current + oldAmt - newAmt
+	currentBal, err := account.CurrentBalance.Float64Value()
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+	oldAmt, err := existing.Amount.Float64Value()
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	var newBalFloat float64
+	if existing.Type == "income" {
+		newBalFloat = currentBal.Float64 - oldAmt.Float64 + req.Amount
+	} else {
+		newBalFloat = currentBal.Float64 + oldAmt.Float64 - req.Amount
+	}
+
+	newBalance, err := util.GetNumeric(newBalFloat)
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	// START transaction
+	tx, err := h.config.DB.Begin(c.Request.Context())
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+	defer tx.Rollback(c.Request.Context())
+
+	q := database.New(tx)
+
+	transaction, err := q.UpdateTransaction(c.Request.Context(), database.UpdateTransactionParams{
+		ID:              transactionID,
+		CategoryID:      categoryID,
+		Amount:          amount,
+		TransactionDate: transactionDate,
+		Description:     req.Description,
+		Notes:           req.Notes,
+		Payee:           req.Payee,
+		Location:        req.Location,
+		Tags:            req.Tags,
+		UserID:          user.ID,
+	})
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	if _, err = q.UpdateAccountBalance(c.Request.Context(), database.UpdateAccountBalanceParams{
+		ID:             existing.AccountID,
+		CurrentBalance: newBalance,
+	}); err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	if err = tx.Commit(c.Request.Context()); err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+	// END transaction
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":      http.StatusOK,
+		"transaction": transaction,
+	})
+}
+
+func (h *Handler) DeleteTransaction(c *gin.Context) {
+	token := c.MustGet("firebaseToken").(*auth.Token)
+
+	user, err := h.config.Querier.GetUserByFirebaseUID(c.Request.Context(), token.UID)
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	transactionID, err := util.GetUUID(c.Param("id"))
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid transaction id"),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	existing, err := h.config.Querier.GetTransactionByID(c.Request.Context(), database.GetTransactionByIDParams{
+		ID:     transactionID,
+		UserID: user.ID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusNotFound, "not found", "transaction not found"),
+				Type: gin.ErrorTypePublic,
+			})
+		} else {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+				Type: gin.ErrorTypePublic,
+			})
+		}
+		c.Abort()
+		return
+	}
+
+	account, err := h.config.Querier.GetAccountByID(c.Request.Context(), database.GetAccountByIDParams{
+		ID:     existing.AccountID,
+		UserID: user.ID,
+	})
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	// Compute new balance: reverse the old amount then apply the new one.
+	// income: balance += amount on create, so new = current - oldAmt + newAmt
+	// expense: balance -= amount on create, so new = current + oldAmt - newAmt
+	currentBal, err := account.CurrentBalance.Float64Value()
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+	oldAmt, err := existing.Amount.Float64Value()
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	var newBalFloat float64
+	if existing.Type == "income" {
+		newBalFloat = currentBal.Float64 - oldAmt.Float64
+	} else {
+		newBalFloat = currentBal.Float64 + oldAmt.Float64
+	}
+
+	newBalance, err := util.GetNumeric(newBalFloat)
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	// START transaction
+	tx, err := h.config.DB.Begin(c.Request.Context())
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+	defer tx.Rollback(c.Request.Context())
+
+	q := database.New(tx)
+
+	if err := q.DeleteTransaction(c.Request.Context(), database.DeleteTransactionParams{
+		ID:     transactionID,
+		UserID: user.ID,
+	}); err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	if _, err = q.UpdateAccountBalance(c.Request.Context(), database.UpdateAccountBalanceParams{
+		ID:             existing.AccountID,
+		CurrentBalance: newBalance,
+	}); err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	if err = tx.Commit(c.Request.Context()); err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+	// START transaction
+
+	c.Status(http.StatusNoContent)
+}

@@ -25,7 +25,7 @@ func (h *Handler) ListAccounts(c *gin.Context) {
 		return
 	}
 
-	accounts, err := h.config.Querier.ListAccountsByUser(c.Request.Context(), user.ID)
+	accounts, err := h.config.Querier.ListActiveAccountsByUser(c.Request.Context(), user.ID)
 	if err != nil {
 		c.Error(&gin.Error{
 			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
@@ -256,4 +256,63 @@ func (h *Handler) UpdateAccount(c *gin.Context) {
 		"status":  http.StatusOK,
 		"account": account,
 	})
+}
+
+func (h *Handler) DeactivateAccount(c *gin.Context) {
+	token := c.MustGet("firebaseToken").(*auth.Token)
+
+	user, err := h.config.Querier.GetUserByFirebaseUID(c.Request.Context(), token.UID)
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	accountID, err := util.GetUUID(c.Param("id"))
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid account id"),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	// Verify ownership — GetAccountByID filters by both id and user_id
+	if _, err := h.config.Querier.GetAccountByID(c.Request.Context(), database.GetAccountByIDParams{
+		ID:     accountID,
+		UserID: user.ID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusNotFound, "not found", "account not found"),
+				Type: gin.ErrorTypePublic,
+			})
+		} else {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+				Type: gin.ErrorTypePublic,
+			})
+		}
+		c.Abort()
+		return
+	}
+
+	params := database.DeactivateAccountParams{
+		ID:     accountID,
+		UserID: user.ID,
+	}
+	if err := h.config.Querier.DeactivateAccount(c.Request.Context(), params); err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
