@@ -289,6 +289,76 @@ func (q *Queries) ListActiveBudgetsByUser(ctx context.Context, userID pgtype.UUI
 	return items, nil
 }
 
+const listAllBudgetsExceedingThreshold = `-- name: ListAllBudgetsExceedingThreshold :many
+SELECT
+    b.id,
+    b.user_id,
+    b.name,
+    b.amount,
+    b.alert_threshold,
+    COALESCE(SUM(t.amount), 0) AS spent_amount,
+    CASE WHEN b.amount > 0
+        THEN ROUND((COALESCE(SUM(t.amount), 0) / b.amount) * 100, 2)
+        ELSE 0
+    END AS spent_percentage
+FROM budgets b
+LEFT JOIN transactions t ON t.category_id = b.category_id
+    AND t.user_id = b.user_id
+    AND t.type = 'expense'
+    AND t.transaction_date BETWEEN $1 AND $2
+WHERE b.is_active = true
+  AND (b.end_date IS NULL OR b.end_date >= CURRENT_DATE)
+GROUP BY b.id
+HAVING CASE WHEN b.amount > 0
+    THEN (COALESCE(SUM(t.amount), 0) / b.amount) * 100
+    ELSE 0
+END >= b.alert_threshold
+ORDER BY spent_percentage DESC
+`
+
+type ListAllBudgetsExceedingThresholdParams struct {
+	TransactionDate   pgtype.Date `json:"transaction_date"`
+	TransactionDate_2 pgtype.Date `json:"transaction_date_2"`
+}
+
+type ListAllBudgetsExceedingThresholdRow struct {
+	ID              pgtype.UUID    `json:"id"`
+	UserID          pgtype.UUID    `json:"user_id"`
+	Name            string         `json:"name"`
+	Amount          pgtype.Numeric `json:"amount"`
+	AlertThreshold  pgtype.Numeric `json:"alert_threshold"`
+	SpentAmount     interface{}    `json:"spent_amount"`
+	SpentPercentage int32          `json:"spent_percentage"`
+}
+
+func (q *Queries) ListAllBudgetsExceedingThreshold(ctx context.Context, arg ListAllBudgetsExceedingThresholdParams) ([]ListAllBudgetsExceedingThresholdRow, error) {
+	rows, err := q.db.Query(ctx, listAllBudgetsExceedingThreshold, arg.TransactionDate, arg.TransactionDate_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllBudgetsExceedingThresholdRow{}
+	for rows.Next() {
+		var i ListAllBudgetsExceedingThresholdRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.Amount,
+			&i.AlertThreshold,
+			&i.SpentAmount,
+			&i.SpentPercentage,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBudgetsByUser = `-- name: ListBudgetsByUser :many
 SELECT b.id, b.user_id, b.category_id, b.name, b.amount, b.period, b.start_date, b.end_date, b.alert_threshold, b.is_active, b.created_at, b.updated_at, c.name AS category_name, c.color, c.icon
 FROM budgets b

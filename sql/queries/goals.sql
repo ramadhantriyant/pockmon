@@ -62,6 +62,12 @@ RETURNING *;
 DELETE FROM goals
 WHERE id = $1 AND user_id = $2;
 
+-- name: ListGoalsReachedTarget :many
+SELECT id, user_id, name, target_amount, current_amount
+FROM goals
+WHERE is_completed = false
+  AND current_amount >= target_amount;
+
 -- name: GetGoalProgress :one
 SELECT
     id,

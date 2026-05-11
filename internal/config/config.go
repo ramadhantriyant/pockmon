@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cloud.google.com/go/storage"
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -8,10 +9,12 @@ import (
 )
 
 type Config struct {
-	DB          *pgxpool.Pool
-	Querier     database.Querier
-	FirebaseApp *firebase.App
-	AuthClient  *auth.Client
+	DB            *pgxpool.Pool
+	Querier       database.Querier
+	FirebaseApp   *firebase.App
+	AuthClient    *auth.Client
+	StorageClient *storage.Client
+	StorageBucket string
 }
 
 func New(pool *pgxpool.Pool, firebaseApp *firebase.App) *Config {

@@ -67,10 +67,44 @@ func createServer(ctx context.Context, cfg *config.Config, port string) *http.Se
 			account.POST("/:id/adjustment", h.CreateAdjustment)
 		}
 
+		recurring := api.Group("/recurring")
+		{
+			recurring.GET("", h.ListRecurringTransactions)
+			recurring.GET("/active", h.ListActiveRecurringTransactions)
+			recurring.GET("/:id", h.GetRecurringTransaction)
+			recurring.POST("", h.CreateRecurringTransaction)
+			recurring.PUT("/:id", h.UpdateRecurringTransaction)
+			recurring.DELETE("/:id", h.DeactivateRecurringTransaction)
+		}
+
 		adjustment := api.Group("/adjustment")
 		{
 			adjustment.GET("", h.ListAdjustments)
 			adjustment.GET("/:id", h.GetAdjustment)
+		}
+
+		notification := api.Group("/notification")
+		{
+			notification.GET("", h.ListNotifications)
+			notification.GET("/unread", h.ListUnreadNotifications)
+			notification.PATCH("/:id/read", h.MarkNotificationAsRead)
+			notification.PATCH("/read-all", h.MarkAllNotificationsAsRead)
+			notification.DELETE("/:id", h.DeleteNotification)
+			notification.DELETE("/read", h.DeleteReadNotifications)
+		}
+
+		goal := api.Group("/goal")
+		{
+			goal.GET("", h.ListGoals)
+			goal.GET("/active", h.ListActiveGoals)
+			goal.GET("/type/:type", h.ListGoalsByType)
+			goal.GET("/:id", h.GetGoal)
+			goal.GET("/:id/progress", h.GetGoalProgress)
+			goal.POST("", h.CreateGoal)
+			goal.PUT("/:id", h.UpdateGoal)
+			goal.PATCH("/:id/contribute", h.ContributeToGoal)
+			goal.PATCH("/:id/complete", h.CompleteGoal)
+			goal.DELETE("/:id", h.DeleteGoal)
 		}
 
 		budget := api.Group("/budget")
@@ -98,13 +132,23 @@ func createServer(ctx context.Context, cfg *config.Config, port string) *http.Se
 		transaction := api.Group("/transaction")
 		{
 			transaction.GET("", h.ListTransactions)
-			transaction.GET("/category/:id", h.ListTransactionsByCategory) // List by category
-			transaction.GET("/account/:id", h.ListTransactionsByAccount)   // List by account
-			transaction.GET("/type/:type", h.ListTransactionsByType)       // List by type (expense, income)
-			transaction.GET("/tags", h.ListTransactionsByTags)             // List by tag
+			transaction.GET("/category/:id", h.ListTransactionsByCategory)
+			transaction.GET("/account/:id", h.ListTransactionsByAccount)
+			transaction.GET("/type/:type", h.ListTransactionsByType)
+			transaction.GET("/tags", h.ListTransactionsByTags)
+			transaction.GET("/:id", h.GetTransaction)
 			transaction.POST("", h.CreateTransaction)
 			transaction.PUT("/:id", h.UpdateTransaction)
 			transaction.DELETE("/:id", h.DeleteTransaction)
+			transaction.GET("/:id/attachment", h.ListAttachmentsByTransaction)
+			transaction.GET("/:id/attachment/upload-url", h.GetUploadURL)
+			transaction.POST("/:id/attachment", h.ConfirmAttachment)
+		}
+
+		attachment := api.Group("/attachment")
+		{
+			attachment.GET("/:id", h.GetAttachment)
+			attachment.DELETE("/:id", h.DeleteAttachment)
 		}
 	}
 	r.NoRoute(func(c *gin.Context) {

@@ -406,6 +406,47 @@ func (q *Queries) ListGoalsByUser(ctx context.Context, userID pgtype.UUID) ([]Li
 	return items, nil
 }
 
+const listGoalsReachedTarget = `-- name: ListGoalsReachedTarget :many
+SELECT id, user_id, name, target_amount, current_amount
+FROM goals
+WHERE is_completed = false
+  AND current_amount >= target_amount
+`
+
+type ListGoalsReachedTargetRow struct {
+	ID            pgtype.UUID    `json:"id"`
+	UserID        pgtype.UUID    `json:"user_id"`
+	Name          string         `json:"name"`
+	TargetAmount  pgtype.Numeric `json:"target_amount"`
+	CurrentAmount pgtype.Numeric `json:"current_amount"`
+}
+
+func (q *Queries) ListGoalsReachedTarget(ctx context.Context) ([]ListGoalsReachedTargetRow, error) {
+	rows, err := q.db.Query(ctx, listGoalsReachedTarget)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGoalsReachedTargetRow{}
+	for rows.Next() {
+		var i ListGoalsReachedTargetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.TargetAmount,
+			&i.CurrentAmount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateGoal = `-- name: UpdateGoal :one
 UPDATE goals
 SET name = $2,

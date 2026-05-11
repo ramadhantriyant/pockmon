@@ -231,6 +231,55 @@ func (h *Handler) ListTransactionsByTags(c *gin.Context) {
 	})
 }
 
+func (h *Handler) GetTransaction(c *gin.Context) {
+	token := c.MustGet("firebaseToken").(*auth.Token)
+
+	user, err := h.config.Querier.GetUserByFirebaseUID(c.Request.Context(), token.UID)
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	transactionID, err := util.GetUUID(c.Param("id"))
+	if err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid transaction id"),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	transaction, err := h.config.Querier.GetTransactionByID(c.Request.Context(), database.GetTransactionByIDParams{
+		ID:     transactionID,
+		UserID: user.ID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusNotFound, "not found", "transaction not found"),
+				Type: gin.ErrorTypePublic,
+			})
+		} else {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+				Type: gin.ErrorTypePublic,
+			})
+		}
+		c.Abort()
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":      http.StatusOK,
+		"transaction": transaction,
+	})
+}
+
 func (h *Handler) CreateTransaction(c *gin.Context) {
 	token := c.MustGet("firebaseToken").(*auth.Token)
 

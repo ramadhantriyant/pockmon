@@ -111,3 +111,29 @@ WHERE id = $1 AND user_id = $2;
 -- name: DeleteBudget :exec
 DELETE FROM budgets
 WHERE id = $1 AND user_id = $2;
+
+-- name: ListAllBudgetsExceedingThreshold :many
+SELECT
+    b.id,
+    b.user_id,
+    b.name,
+    b.amount,
+    b.alert_threshold,
+    COALESCE(SUM(t.amount), 0) AS spent_amount,
+    CASE WHEN b.amount > 0
+        THEN ROUND((COALESCE(SUM(t.amount), 0) / b.amount) * 100, 2)
+        ELSE 0
+    END AS spent_percentage
+FROM budgets b
+LEFT JOIN transactions t ON t.category_id = b.category_id
+    AND t.user_id = b.user_id
+    AND t.type = 'expense'
+    AND t.transaction_date BETWEEN $1 AND $2
+WHERE b.is_active = true
+  AND (b.end_date IS NULL OR b.end_date >= CURRENT_DATE)
+GROUP BY b.id
+HAVING CASE WHEN b.amount > 0
+    THEN (COALESCE(SUM(t.amount), 0) / b.amount) * 100
+    ELSE 0
+END >= b.alert_threshold
+ORDER BY spent_percentage DESC;
