@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
@@ -12,32 +11,6 @@ import (
 	"github.com/ramadhantriyant/pockmon/internal/middleware"
 	"github.com/ramadhantriyant/pockmon/internal/util"
 )
-
-const (
-	defaultLimit = 20
-	maxLimit     = 100
-)
-
-func parsePagination(c *gin.Context) (limit, offset int) {
-	limit = defaultLimit
-	offset = 0
-
-	if l := c.Query("limit"); l != "" {
-		if v, err := strconv.Atoi(l); err == nil && v > 0 {
-			limit = v
-		}
-	}
-	if limit > maxLimit {
-		limit = maxLimit
-	}
-
-	if o := c.Query("offset"); o != "" {
-		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
-			offset = v
-		}
-	}
-	return
-}
 
 func (h *Handler) ListTransactions(c *gin.Context) {
 	token := c.MustGet("firebaseToken").(*auth.Token)

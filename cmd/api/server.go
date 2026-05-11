@@ -63,6 +63,27 @@ func createServer(ctx context.Context, cfg *config.Config, port string) *http.Se
 			account.POST("", h.CreateAccount)
 			account.PUT("/:id", h.UpdateAccount)
 			account.DELETE("/:id", h.DeactivateAccount)
+			account.GET("/:id/adjustment", h.ListAdjustmentsByAccount)
+			account.POST("/:id/adjustment", h.CreateAdjustment)
+		}
+
+		adjustment := api.Group("/adjustment")
+		{
+			adjustment.GET("", h.ListAdjustments)
+			adjustment.GET("/:id", h.GetAdjustment)
+		}
+
+		budget := api.Group("/budget")
+		{
+			budget.GET("", h.ListBudgets)
+			budget.GET("/active", h.ListActiveBudgets)
+			budget.GET("/spending", h.ListBudgetsWithSpending)
+			budget.GET("/alerts", h.ListBudgetsExceedingThreshold)
+			budget.GET("/:id", h.GetBudget)
+			budget.GET("/:id/spending", h.GetBudgetWithSpending)
+			budget.POST("", h.CreateBudget)
+			budget.PUT("/:id", h.UpdateBudget)
+			budget.DELETE("/:id", h.DeactivateBudget)
 		}
 
 		transfer := api.Group("/transfer")

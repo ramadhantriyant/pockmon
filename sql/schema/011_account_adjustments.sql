@@ -1,6 +1,6 @@
 -- +goose Up
 CREATE TABLE account_adjustments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     amount NUMERIC(15, 2) NOT NULL,

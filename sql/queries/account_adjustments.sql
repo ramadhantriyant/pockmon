@@ -1,6 +1,6 @@
 -- name: CreateAccountAdjustment :one
-INSERT INTO account_adjustments (account_id, user_id, amount, previous_balance, new_balance, reason, adjustment_date)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO account_adjustments (id, account_id, user_id, amount, previous_balance, new_balance, reason, adjustment_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetAccountAdjustmentByID :one
@@ -31,10 +31,11 @@ FROM account_adjustments adj
 JOIN accounts a ON adj.account_id = a.id
 WHERE adj.user_id = $1
   AND adj.adjustment_date BETWEEN $2 AND $3
-ORDER BY adj.adjustment_date DESC;
+ORDER BY adj.adjustment_date DESC
+LIMIT $4 OFFSET $5;
 
 -- name: GetLatestAdjustmentByAccount :one
 SELECT * FROM account_adjustments
-WHERE account_id = $1
+WHERE account_id = $1 AND user_id = $2
 ORDER BY adjustment_date DESC, created_at DESC
 LIMIT 1;

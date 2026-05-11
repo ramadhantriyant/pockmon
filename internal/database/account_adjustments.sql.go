@@ -12,12 +12,13 @@ import (
 )
 
 const createAccountAdjustment = `-- name: CreateAccountAdjustment :one
-INSERT INTO account_adjustments (account_id, user_id, amount, previous_balance, new_balance, reason, adjustment_date)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO account_adjustments (id, account_id, user_id, amount, previous_balance, new_balance, reason, adjustment_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id, account_id, user_id, amount, previous_balance, new_balance, reason, adjustment_date, created_at
 `
 
 type CreateAccountAdjustmentParams struct {
+	ID              pgtype.UUID    `json:"id"`
 	AccountID       pgtype.UUID    `json:"account_id"`
 	UserID          pgtype.UUID    `json:"user_id"`
 	Amount          pgtype.Numeric `json:"amount"`
@@ -29,6 +30,7 @@ type CreateAccountAdjustmentParams struct {
 
 func (q *Queries) CreateAccountAdjustment(ctx context.Context, arg CreateAccountAdjustmentParams) (AccountAdjustment, error) {
 	row := q.db.QueryRow(ctx, createAccountAdjustment,
+		arg.ID,
 		arg.AccountID,
 		arg.UserID,
 		arg.Amount,
@@ -97,13 +99,18 @@ func (q *Queries) GetAccountAdjustmentByID(ctx context.Context, arg GetAccountAd
 
 const getLatestAdjustmentByAccount = `-- name: GetLatestAdjustmentByAccount :one
 SELECT id, account_id, user_id, amount, previous_balance, new_balance, reason, adjustment_date, created_at FROM account_adjustments
-WHERE account_id = $1
+WHERE account_id = $1 AND user_id = $2
 ORDER BY adjustment_date DESC, created_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetLatestAdjustmentByAccount(ctx context.Context, accountID pgtype.UUID) (AccountAdjustment, error) {
-	row := q.db.QueryRow(ctx, getLatestAdjustmentByAccount, accountID)
+type GetLatestAdjustmentByAccountParams struct {
+	AccountID pgtype.UUID `json:"account_id"`
+	UserID    pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetLatestAdjustmentByAccount(ctx context.Context, arg GetLatestAdjustmentByAccountParams) (AccountAdjustment, error) {
+	row := q.db.QueryRow(ctx, getLatestAdjustmentByAccount, arg.AccountID, arg.UserID)
 	var i AccountAdjustment
 	err := row.Scan(
 		&i.ID,
@@ -191,12 +198,15 @@ JOIN accounts a ON adj.account_id = a.id
 WHERE adj.user_id = $1
   AND adj.adjustment_date BETWEEN $2 AND $3
 ORDER BY adj.adjustment_date DESC
+LIMIT $4 OFFSET $5
 `
 
 type ListAccountAdjustmentsByDateRangeParams struct {
 	UserID           pgtype.UUID `json:"user_id"`
 	AdjustmentDate   pgtype.Date `json:"adjustment_date"`
 	AdjustmentDate_2 pgtype.Date `json:"adjustment_date_2"`
+	Limit            int32       `json:"limit"`
+	Offset           int32       `json:"offset"`
 }
 
 type ListAccountAdjustmentsByDateRangeRow struct {
@@ -213,7 +223,13 @@ type ListAccountAdjustmentsByDateRangeRow struct {
 }
 
 func (q *Queries) ListAccountAdjustmentsByDateRange(ctx context.Context, arg ListAccountAdjustmentsByDateRangeParams) ([]ListAccountAdjustmentsByDateRangeRow, error) {
-	rows, err := q.db.Query(ctx, listAccountAdjustmentsByDateRange, arg.UserID, arg.AdjustmentDate, arg.AdjustmentDate_2)
+	rows, err := q.db.Query(ctx, listAccountAdjustmentsByDateRange,
+		arg.UserID,
+		arg.AdjustmentDate,
+		arg.AdjustmentDate_2,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}

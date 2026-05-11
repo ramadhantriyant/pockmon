@@ -51,7 +51,7 @@ type Querier interface {
 	GetGoalByID(ctx context.Context, arg GetGoalByIDParams) (GetGoalByIDRow, error)
 	GetGoalProgress(ctx context.Context, arg GetGoalProgressParams) (GetGoalProgressRow, error)
 	GetIncomeVsExpenseByMonth(ctx context.Context, arg GetIncomeVsExpenseByMonthParams) ([]GetIncomeVsExpenseByMonthRow, error)
-	GetLatestAdjustmentByAccount(ctx context.Context, accountID pgtype.UUID) (AccountAdjustment, error)
+	GetLatestAdjustmentByAccount(ctx context.Context, arg GetLatestAdjustmentByAccountParams) (AccountAdjustment, error)
 	GetMonthlySpendingByCategory(ctx context.Context, arg GetMonthlySpendingByCategoryParams) ([]GetMonthlySpendingByCategoryRow, error)
 	GetNotificationByID(ctx context.Context, arg GetNotificationByIDParams) (Notification, error)
 	GetRecurringTransactionByID(ctx context.Context, arg GetRecurringTransactionByIDParams) (GetRecurringTransactionByIDRow, error)
