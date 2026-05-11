@@ -778,8 +778,8 @@ func (h *Handler) DeleteTransaction(c *gin.Context) {
 	}
 
 	// Compute new balance: reverse the old amount then apply the new one.
-	// income: balance += amount on create, so new = current - oldAmt + newAmt
-	// expense: balance -= amount on create, so new = current + oldAmt - newAmt
+	// income: balance -= amount on create, so new = current - oldAmt
+	// expense: balance += amount on create, so new = current + oldAmt
 	currentBal, err := account.CurrentBalance.Float64Value()
 	if err != nil {
 		c.Error(&gin.Error{
