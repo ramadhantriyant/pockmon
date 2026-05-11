@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Environment files
+.env
+.env.*
+*.json
+
+# Documentation
+*.md
+APIDOC.md
+README.md
+
+# IDE
+.vscode
+.idea
+
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+
+# Other
+tmp/
+temp/
