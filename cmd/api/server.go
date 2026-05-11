@@ -21,6 +21,7 @@ func createServer(ctx context.Context, cfg *config.Config, port string) *http.Se
 	if err != nil {
 		log.Fatalf("failed to create Firebase auth client: %v", err)
 	}
+	cfg.AuthClient = authClient
 
 	r := gin.New()
 	r.Use(
@@ -34,29 +35,47 @@ func createServer(ctx context.Context, cfg *config.Config, port string) *http.Se
 	{
 		auth.POST("/register", h.Register)
 		auth.GET("/me", h.GetMe)
-		auth.DELETE("/account", h.DeleteAccount)
+		auth.PUT("/me/currency/:code", h.UpdateCurrency)
+	}
+
+	user := r.Group("/user", middleware.Auth(authClient))
+	{
+		user.GET("", h.ListUsers)
+		user.PUT("/:id", h.ToggleAdmin)
+		user.DELETE("/:id", h.DeleteUser)
 	}
 
 	api := r.Group("/api", middleware.Auth(authClient))
-
-	category := api.Group("/category")
 	{
-		category.GET("", h.ListCategories)
-		category.GET("/:id", h.GetCategory)
-		category.POST("", h.CreateCategory)
-		category.PUT("/:id", h.UpdateCategory)
-		category.DELETE("/:id", h.DeleteCategory)
-	}
+		category := api.Group("/category")
+		{
+			category.GET("", h.ListCategories)
+			category.GET("/:id", h.GetCategory)
+			category.POST("", h.CreateCategory)
+			category.PUT("/:id", h.UpdateCategory)
+			category.DELETE("/:id", h.DeleteCategory)
+		}
 
-	account := api.Group("/account")
-	{
-		account.GET("")
-		account.GET("/:id")
-		account.POST("")
-		account.PUT("/:id")
-		account.DELETE("/:id")
-	}
+		account := api.Group("/account")
+		{
+			account.GET("", h.ListAccounts)
+			account.GET("/:id", h.GetAccount)
+			account.POST("", h.CreateAccount)
+			account.PUT("/:id", h.UpdateAccount)
+		}
 
+		transaction := api.Group("/transaction")
+		{
+			transaction.GET("", h.ListTransactions)
+			transaction.GET("/category/:id", h.ListTransactionsByCategory) // List by category
+			transaction.GET("/account/:id", h.ListTransactionsByAccount)   // List by account
+			transaction.GET("/type/:type", h.ListTransactionsByType)       // List by type (expense, income)
+			transaction.GET("/tags", h.ListTransactionsByTags)             // List by tag
+			transaction.POST("", h.CreateTransaction)
+			transaction.PUT("/:id", h.UpdateTransaction)
+			transaction.DELETE("/:id", h.DeleteTransaction)
+		}
+	}
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"status":    404,

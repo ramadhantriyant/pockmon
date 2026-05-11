@@ -11,10 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countUser = `-- name: CountUser :one
+SELECT COUNT(*) FROM users
+`
+
+func (q *Queries) CountUser(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countUser)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, firebase_uid, currency_code)
 VALUES ($1, $2, $3)
-RETURNING id, firebase_uid, currency_code, created_at, updated_at
+RETURNING id, firebase_uid, currency_code, is_admin, created_at, updated_at
 `
 
 type CreateUserParams struct {
@@ -30,6 +41,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.ID,
 		&i.FirebaseUid,
 		&i.CurrencyCode,
+		&i.IsAdmin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -47,7 +59,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getUserByFirebaseUID = `-- name: GetUserByFirebaseUID :one
-SELECT id, firebase_uid, currency_code, created_at, updated_at FROM users
+SELECT id, firebase_uid, currency_code, is_admin, created_at, updated_at FROM users
 WHERE firebase_uid = $1
 `
 
@@ -58,6 +70,7 @@ func (q *Queries) GetUserByFirebaseUID(ctx context.Context, firebaseUid string) 
 		&i.ID,
 		&i.FirebaseUid,
 		&i.CurrencyCode,
+		&i.IsAdmin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -65,7 +78,7 @@ func (q *Queries) GetUserByFirebaseUID(ctx context.Context, firebaseUid string) 
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, firebase_uid, currency_code, created_at, updated_at FROM users
+SELECT id, firebase_uid, currency_code, is_admin, created_at, updated_at FROM users
 WHERE id = $1
 `
 
@@ -76,18 +89,66 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.ID,
 		&i.FirebaseUid,
 		&i.CurrencyCode,
+		&i.IsAdmin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const updateUserCurrency = `-- name: UpdateUserCurrency :one
+const listUser = `-- name: ListUser :many
+SELECT id, firebase_uid, currency_code, is_admin, created_at, updated_at FROM users
+`
+
+func (q *Queries) ListUser(ctx context.Context) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUser)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.FirebaseUid,
+			&i.CurrencyCode,
+			&i.IsAdmin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setUserAdmin = `-- name: SetUserAdmin :exec
+UPDATE users
+SET is_admin = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+type SetUserAdminParams struct {
+	ID      pgtype.UUID `json:"id"`
+	IsAdmin bool        `json:"is_admin"`
+}
+
+func (q *Queries) SetUserAdmin(ctx context.Context, arg SetUserAdminParams) error {
+	_, err := q.db.Exec(ctx, setUserAdmin, arg.ID, arg.IsAdmin)
+	return err
+}
+
+const updateUserCurrency = `-- name: UpdateUserCurrency :exec
 UPDATE users
 SET currency_code = $2,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
-RETURNING id, firebase_uid, currency_code, created_at, updated_at
 `
 
 type UpdateUserCurrencyParams struct {
@@ -95,15 +156,7 @@ type UpdateUserCurrencyParams struct {
 	CurrencyCode string      `json:"currency_code"`
 }
 
-func (q *Queries) UpdateUserCurrency(ctx context.Context, arg UpdateUserCurrencyParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserCurrency, arg.ID, arg.CurrencyCode)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.FirebaseUid,
-		&i.CurrencyCode,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+func (q *Queries) UpdateUserCurrency(ctx context.Context, arg UpdateUserCurrencyParams) error {
+	_, err := q.db.Exec(ctx, updateUserCurrency, arg.ID, arg.CurrencyCode)
+	return err
 }

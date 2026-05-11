@@ -23,3 +23,17 @@ func GetUUID(id string) (pgtype.UUID, error) {
 
 	return pgUUID, err
 }
+
+func GetNumeric(f float64) (pgtype.Numeric, error) {
+	var n pgtype.Numeric
+	err := n.Scan(f)
+
+	return n, err
+}
+
+func GetDate(s string) (pgtype.Date, error) {
+	var d pgtype.Date
+	err := d.Scan(s)
+
+	return d, err
+}

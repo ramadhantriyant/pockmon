@@ -163,6 +163,7 @@ type User struct {
 	ID           pgtype.UUID      `json:"id"`
 	FirebaseUid  string           `json:"firebase_uid"`
 	CurrencyCode string           `json:"currency_code"`
+	IsAdmin      bool             `json:"is_admin"`
 	CreatedAt    pgtype.Timestamp `json:"created_at"`
 	UpdatedAt    pgtype.Timestamp `json:"updated_at"`
 }

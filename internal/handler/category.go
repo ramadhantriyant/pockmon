@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/ramadhantriyant/pockmon/internal/database"
 	"github.com/ramadhantriyant/pockmon/internal/middleware"
 	"github.com/ramadhantriyant/pockmon/internal/util"
@@ -16,7 +18,7 @@ func (h *Handler) ListCategories(c *gin.Context) {
 	user, err := h.config.Querier.GetUserByFirebaseUID(c.Request.Context(), token.UID)
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error"),
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -26,7 +28,7 @@ func (h *Handler) ListCategories(c *gin.Context) {
 	categories, err := h.config.Querier.ListCategoriesByUser(c.Request.Context(), user.ID)
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error"),
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -45,7 +47,7 @@ func (h *Handler) GetCategory(c *gin.Context) {
 	user, err := h.config.Querier.GetUserByFirebaseUID(c.Request.Context(), token.UID)
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error"),
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -55,21 +57,29 @@ func (h *Handler) GetCategory(c *gin.Context) {
 	categoryID, err := util.GetUUID(c.Param("id"))
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusNotFound, "not found", "invalid category id"),
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid category id"),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
 		return
 	}
+
 	category, err := h.config.Querier.GetCategoryByIDAndUser(c.Request.Context(), database.GetCategoryByIDAndUserParams{
 		ID:     categoryID,
 		UserID: user.ID,
 	})
 	if err != nil {
-		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusNotFound, "not found", "invalid category id"),
-			Type: gin.ErrorTypePublic,
-		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusNotFound, "not found", "category not found"),
+				Type: gin.ErrorTypePublic,
+			})
+		} else {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+				Type: gin.ErrorTypePublic,
+			})
+		}
 		c.Abort()
 		return
 	}
@@ -86,7 +96,7 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 	user, err := h.config.Querier.GetUserByFirebaseUID(c.Request.Context(), token.UID)
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error"),
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -95,14 +105,14 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 
 	var newCategory struct {
 		Name             string  `json:"name" binding:"required"`
-		Type             string  `json:"type" binding:"required"`
+		Type             string  `json:"type" binding:"required,oneof=expense income"`
 		Color            *string `json:"color"`
 		Icon             *string `json:"icon"`
 		ParentCategoryID *string `json:"parent_category_id"`
 	}
 	if err := c.ShouldBindJSON(&newCategory); err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid json format"),
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid request body"),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -112,7 +122,7 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 	categoryID, err := util.GenerateUUID()
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error"),
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -132,7 +142,7 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 		parentCatID, err := util.GetUUID(*newCategory.ParentCategoryID)
 		if err != nil {
 			c.Error(&gin.Error{
-				Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid parent category ID"),
+				Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid parent category id"),
 				Type: gin.ErrorTypePublic,
 			})
 			c.Abort()
@@ -152,7 +162,7 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 	category, err := h.config.Querier.CreateCategory(c.Request.Context(), params)
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error"),
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -171,22 +181,7 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 	user, err := h.config.Querier.GetUserByFirebaseUID(c.Request.Context(), token.UID)
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error"),
-			Type: gin.ErrorTypePublic,
-		})
-		c.Abort()
-		return
-	}
-
-	var editedCategory struct {
-		Name             string `json:"name" binding:"required"`
-		Color            string `json:"color"`
-		Icon             string `json:"icon"`
-		ParentCategoryID string `json:"parent_category_id"`
-	}
-	if err := c.ShouldBindJSON(&editedCategory); err != nil {
-		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid json format"),
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -196,46 +191,71 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 	categoryID, err := util.GetUUID(c.Param("id"))
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusNotFound, "not found", "category id not found"),
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid category id"),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
 		return
 	}
 
-	parentCategoryID, err := util.GetUUID(editedCategory.ParentCategoryID)
-	if err != nil {
+	var editedCategory struct {
+		Name             string  `json:"name" binding:"required"`
+		Type             string  `json:"type" binding:"required,oneof=expense income"`
+		Color            *string `json:"color"`
+		Icon             *string `json:"icon"`
+		ParentCategoryID *string `json:"parent_category_id"`
+	}
+	if err := c.ShouldBindJSON(&editedCategory); err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusNotFound, "not found", "parent category ID not found or invalid"),
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid request body"),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
 		return
 	}
 
-	_, err = h.config.Querier.GetCategoryByID(c.Request.Context(), parentCategoryID)
-	if err != nil {
-		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusNotFound, "not found", "invalid parent category ID"),
-			Type: gin.ErrorTypePublic,
-		})
-		c.Abort()
-		return
+	params := database.UpdateCategoryParams{
+		ID:     categoryID,
+		Name:   editedCategory.Name,
+		Color:  editedCategory.Color,
+		Icon:   editedCategory.Icon,
+		UserID: user.ID,
 	}
 
-	category, err := h.config.Querier.UpdateCategory(c.Request.Context(), database.UpdateCategoryParams{
-		ID:               categoryID,
-		Name:             editedCategory.Name,
-		Color:            &editedCategory.Color,
-		Icon:             &editedCategory.Icon,
-		ParentCategoryID: parentCategoryID,
-		UserID:           user.ID,
-	})
+	if editedCategory.ParentCategoryID != nil {
+		parentCatID, err := util.GetUUID(*editedCategory.ParentCategoryID)
+		if err != nil {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid parent category id"),
+				Type: gin.ErrorTypePublic,
+			})
+			c.Abort()
+			return
+		}
+		if _, err = h.config.Querier.GetCategoryByID(c.Request.Context(), parentCatID); err != nil {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusNotFound, "not found", "parent category not found"),
+				Type: gin.ErrorTypePublic,
+			})
+			c.Abort()
+			return
+		}
+		params.ParentCategoryID = parentCatID
+	}
+
+	category, err := h.config.Querier.UpdateCategory(c.Request.Context(), params)
 	if err != nil {
-		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error"),
-			Type: gin.ErrorTypePublic,
-		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusNotFound, "not found", "category not found"),
+				Type: gin.ErrorTypePublic,
+			})
+		} else {
+			c.Error(&gin.Error{
+				Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+				Type: gin.ErrorTypePublic,
+			})
+		}
 		c.Abort()
 		return
 	}
@@ -252,7 +272,7 @@ func (h *Handler) DeleteCategory(c *gin.Context) {
 	user, err := h.config.Querier.GetUserByFirebaseUID(c.Request.Context(), token.UID)
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error"),
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "user not found or internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -262,7 +282,7 @@ func (h *Handler) DeleteCategory(c *gin.Context) {
 	categoryID, err := util.GetUUID(c.Param("id"))
 	if err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusNotFound, "not found", "category id not found"),
+			Err:  middleware.NewAppError(http.StatusBadRequest, "bad request", "invalid category id"),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
@@ -274,12 +294,12 @@ func (h *Handler) DeleteCategory(c *gin.Context) {
 		UserID: user.ID,
 	}); err != nil {
 		c.Error(&gin.Error{
-			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error"),
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
 			Type: gin.ErrorTypePublic,
 		})
 		c.Abort()
 		return
 	}
 
-	c.JSON(http.StatusNoContent, nil)
+	c.Status(http.StatusNoContent)
 }

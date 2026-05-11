@@ -14,6 +14,7 @@ type Querier interface {
 	CompleteGoal(ctx context.Context, arg CompleteGoalParams) (Goal, error)
 	CountTransactionsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountUnreadNotifications(ctx context.Context, userID pgtype.UUID) (int64, error)
+	CountUser(ctx context.Context) (int64, error)
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
 	CreateAccountAdjustment(ctx context.Context, arg CreateAccountAdjustmentParams) (AccountAdjustment, error)
 	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
@@ -92,9 +93,11 @@ type Querier interface {
 	ListTransfersByDateRange(ctx context.Context, arg ListTransfersByDateRangeParams) ([]ListTransfersByDateRangeRow, error)
 	ListTransfersByUser(ctx context.Context, arg ListTransfersByUserParams) ([]ListTransfersByUserRow, error)
 	ListUnreadNotificationsByUser(ctx context.Context, userID pgtype.UUID) ([]Notification, error)
+	ListUser(ctx context.Context) ([]User, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID pgtype.UUID) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) error
 	SetSystemCategory(ctx context.Context, arg SetSystemCategoryParams) error
+	SetUserAdmin(ctx context.Context, arg SetUserAdminParams) error
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (Account, error)
 	UpdateAccountBalance(ctx context.Context, arg UpdateAccountBalanceParams) (Account, error)
 	UpdateBudget(ctx context.Context, arg UpdateBudgetParams) (Budget, error)
@@ -104,7 +107,7 @@ type Querier interface {
 	UpdateNextDueDate(ctx context.Context, arg UpdateNextDueDateParams) (RecurringTransaction, error)
 	UpdateRecurringTransaction(ctx context.Context, arg UpdateRecurringTransactionParams) (RecurringTransaction, error)
 	UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) (Transaction, error)
-	UpdateUserCurrency(ctx context.Context, arg UpdateUserCurrencyParams) (User, error)
+	UpdateUserCurrency(ctx context.Context, arg UpdateUserCurrencyParams) error
 }
 
 var _ Querier = (*Queries)(nil)
