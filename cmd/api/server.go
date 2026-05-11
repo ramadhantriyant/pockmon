@@ -65,6 +65,15 @@ func createServer(ctx context.Context, cfg *config.Config, port string) *http.Se
 			account.DELETE("/:id", h.DeactivateAccount)
 		}
 
+		transfer := api.Group("/transfer")
+		{
+			transfer.GET("", h.ListTransfers)
+			transfer.GET("/:id", h.GetTransfer)
+			transfer.GET("/account/:id", h.ListTransfersByAccount)
+			transfer.POST("", h.CreateTransfer)
+			transfer.DELETE("/:id", h.DeleteTransfer)
+		}
+
 		transaction := api.Group("/transaction")
 		{
 			transaction.GET("", h.ListTransactions)

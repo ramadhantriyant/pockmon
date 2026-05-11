@@ -9,7 +9,6 @@ import (
 	firebase "firebase.google.com/go/v4"
 	"github.com/joho/godotenv"
 	"github.com/ramadhantriyant/pockmon/internal/config"
-	"google.golang.org/api/option"
 )
 
 func main() {
@@ -18,10 +17,9 @@ func main() {
 		log.Println("failed to load .env, using environment variables")
 	}
 
-	opt := option.WithCredentialsFile("firebase-pockmon.json")
-	firebaseApp, err := firebase.NewApp(ctx, nil, opt)
+	firebaseApp, err := firebase.NewApp(ctx, nil)
 	if err != nil {
-		log.Fatalf("firebase option error: %v", err)
+		log.Fatalf("firebase init error: %v", err)
 	}
 
 	dbURL := os.Getenv("DB_URL")
