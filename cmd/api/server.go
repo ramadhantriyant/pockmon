@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/ramadhantriyant/pockmon/internal/config"
 	"github.com/ramadhantriyant/pockmon/internal/handler"
@@ -25,6 +26,11 @@ func createServer(ctx context.Context, cfg *config.Config, port string) *http.Se
 
 	r := gin.New()
 	r.Use(
+		cors.New(cors.Config{
+			AllowOrigins: []string{"*"},
+			AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+			AllowHeaders: []string{"Authorization", "Content-Type"},
+		}),
 		gin.Recovery(),
 		middleware.Logger(),
 		middleware.ErrorHandler(),
