@@ -1,0 +1,2946 @@
+openapi: 3.0.3
+info:
+  title: Pockmon API
+  description: >
+    Personal finance REST API. Firebase handles authentication identity;
+    this service owns all financial data — accounts, transactions,
+    categories, budgets, goals, recurring transactions, transfers,
+    and notifications.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Components
+# ──────────────────────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase JWT
+      description: >
+        Obtain a Firebase ID token from the Firebase client SDK and pass it as
+        `Authorization: Bearer <token>` on every request.
+
+  schemas:
+    # ── Common ─────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 404
+        error:
+          type: string
+          example: not found
+        message:
+          type: string
+          example: account not found
+        path:
+          type: string
+          example: /api/account/abc
+        timestamp:
+          type: string
+          format: date-time
+
+    # ── Auth user (Register / GetMe / UpdateCurrency responses) ────────────
+    # These endpoints build the response from the Firebase token claims;
+    # they return email / display_name / photo_url instead of id / timestamps.
+    AuthUser:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        photo_url:
+          type: string
+        currency_code:
+          type: string
+          example: IDR
+        is_admin:
+          type: boolean
+
+    # ── DB user (ListUsers / ToggleAdmin responses) ─────────────────────────
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firebase_uid:
+          type: string
+        currency_code:
+          type: string
+          example: IDR
+        is_admin:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Category ───────────────────────────────────────────────────────────
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        type:
+          type: string
+          enum: [income, expense]
+        icon:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        parent_category_id:
+          type: string
+          format: uuid
+          nullable: true
+        is_system:
+          type: boolean
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Account ────────────────────────────────────────────────────────────
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [cash, bank, credit_card, debit_card, investment, loan]
+        currency_code:
+          type: string
+          example: IDR
+          nullable: true
+        initial_balance:
+          type: number
+          format: double
+        current_balance:
+          type: number
+          format: double
+        include_in_total:
+          type: boolean
+          nullable: true
+        is_active:
+          type: boolean
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── AccountAdjustment ──────────────────────────────────────────────────
+    AccountAdjustment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+          description: Signed delta (new_balance − previous_balance)
+        previous_balance:
+          type: number
+          format: double
+        new_balance:
+          type: number
+          format: double
+        reason:
+          type: string
+          nullable: true
+        adjustment_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+        account_name:
+          type: string
+          description: Joined from accounts table (present in list responses)
+
+    # ── Transaction ────────────────────────────────────────────────────────
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          type: string
+          enum: [income, expense]
+        amount:
+          type: number
+          format: double
+        currency_code:
+          type: string
+        transaction_date:
+          type: string
+          format: date
+        description:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        payee:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        is_recurring:
+          type: boolean
+          nullable: true
+        recurring_transaction_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Attachment ─────────────────────────────────────────────────────────
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        file_path:
+          type: string
+        file_type:
+          type: string
+          nullable: true
+        file_size:
+          type: integer
+          nullable: true
+        uploaded_at:
+          type: string
+          format: date-time
+        download_url:
+          type: string
+          description: Signed GCS GET URL valid for 1 hour (added by handler, not in DB model)
+
+    # ── RecurringTransaction ───────────────────────────────────────────────
+    RecurringTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          type: string
+          enum: [income, expense]
+        amount:
+          type: number
+          format: double
+        currency_code:
+          type: string
+          nullable: true
+        description:
+          type: string
+        frequency:
+          type: string
+          enum: [daily, weekly, biweekly, monthly, quarterly, yearly]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        next_due_date:
+          type: string
+          format: date
+        last_processed_date:
+          type: string
+          format: date
+          nullable: true
+        auto_create:
+          type: boolean
+          nullable: true
+          description: >
+            If true the daily cron creates the transaction automatically;
+            if false a reminder notification is sent instead.
+        is_active:
+          type: boolean
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Budget ─────────────────────────────────────────────────────────────
+    # List and get queries JOIN categories, so category_name/color/icon
+    # are always present in responses.
+    Budget:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        amount:
+          type: number
+          format: double
+        period:
+          type: string
+          enum: [daily, weekly, monthly, quarterly, yearly]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        alert_threshold:
+          type: number
+          format: double
+          description: Percentage (0–100). Default 80.
+        is_active:
+          type: boolean
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        category_name:
+          type: string
+          description: Joined from categories table
+        color:
+          type: string
+          nullable: true
+          description: Category color (joined)
+        icon:
+          type: string
+          nullable: true
+          description: Category icon (joined)
+
+    # Returned by GET /api/budget/spending and GET /api/budget/:id/spending.
+    BudgetWithSpending:
+      allOf:
+        - $ref: '#/components/schemas/Budget'
+        - type: object
+          properties:
+            spent_amount:
+              description: Sum of expense transactions in the requested date range
+              type: number
+              format: double
+            remaining_amount:
+              description: amount − spent_amount
+              type: integer
+            spent_percentage:
+              description: (spent_amount / amount) × 100, rounded
+              type: integer
+
+    # Returned by GET /api/budget/alerts (budgets exceeding alert_threshold).
+    BudgetAlert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        amount:
+          type: number
+          format: double
+        period:
+          type: string
+          enum: [daily, weekly, monthly, quarterly, yearly]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        alert_threshold:
+          type: number
+          format: double
+        is_active:
+          type: boolean
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        category_name:
+          type: string
+        spent_amount:
+          type: number
+          format: double
+        spent_percentage:
+          type: integer
+
+    # ── Goal ───────────────────────────────────────────────────────────────
+    # All list/get queries LEFT JOIN accounts, so account_name is always present.
+    Goal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        goal_type:
+          type: string
+          enum: [savings, debt_payoff, investment, purchase, other]
+        target_amount:
+          type: number
+          format: double
+        current_amount:
+          type: number
+          format: double
+        currency_code:
+          type: string
+          nullable: true
+        target_date:
+          type: string
+          format: date
+          nullable: true
+        is_completed:
+          type: boolean
+          nullable: true
+        completed_date:
+          type: string
+          format: date
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        account_name:
+          type: string
+          nullable: true
+          description: Joined from accounts table
+
+    # Returned by GET /api/goal/:id/progress.
+    # GetGoalProgressRow is a flat projection — not a nested Goal object.
+    GoalProgress:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        target_amount:
+          type: number
+          format: double
+        current_amount:
+          type: number
+          format: double
+        progress_percentage:
+          type: integer
+          description: (current_amount / target_amount) × 100, rounded
+        remaining_amount:
+          type: integer
+          description: target_amount − current_amount
+        target_date:
+          type: string
+          format: date
+          nullable: true
+        is_completed:
+          type: boolean
+          nullable: true
+
+    # ── Transfer ───────────────────────────────────────────────────────────
+    # All queries JOIN accounts for from/to names.
+    Transfer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        from_account_id:
+          type: string
+          format: uuid
+        to_account_id:
+          type: string
+          format: uuid
+        from_transaction_id:
+          type: string
+          format: uuid
+        to_transaction_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+        to_amount:
+          type: number
+          format: double
+        exchange_rate:
+          type: number
+          format: double
+        transfer_date:
+          type: string
+          format: date
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        from_account_name:
+          type: string
+          description: Joined from accounts table
+        to_account_name:
+          type: string
+          description: Joined from accounts table
+
+    # ── Notification ───────────────────────────────────────────────────────
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        is_read:
+          type: boolean
+          nullable: true
+        related_id:
+          type: string
+          format: uuid
+          nullable: true
+        related_type:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Paths
+# ──────────────────────────────────────────────────────────────────────────────
+paths:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Auth
+  # ────────────────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      summary: Register local user record
+      description: >
+        Creates a row in the local `users` table linked to the Firebase UID in
+        the JWT. The first user registered is automatically promoted to admin.
+        Also seeds default categories for the new user.
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currency_code]
+              properties:
+                currency_code:
+                  type: string
+                  example: IDR
+      responses:
+        '200':
+          description: Auth user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      summary: Get current user profile
+      tags: [Auth]
+      responses:
+        '200':
+          description: Auth user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '500':
+          description: User not found in local DB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me/currency/{code}:
+    put:
+      summary: Update preferred currency
+      tags: [Auth]
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 4
+          example: USD
+      responses:
+        '200':
+          description: Updated auth user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '400':
+          description: Invalid currency code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Users (admin only)
+  # ────────────────────────────────────────────────────────────────────────────
+  /user:
+    get:
+      summary: List all users
+      description: Admin only.
+      tags: [Users]
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  user:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+        '403':
+          description: Forbidden — caller is not admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/{id}:
+    put:
+      summary: Toggle admin status
+      description: Admin only. Flips `is_admin` for the target user. Cannot demote yourself.
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  user:
+                    $ref: '#/components/schemas/User'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete user
+      description: Admin only. Deletes DB row and the Firebase account.
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Categories
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/category:
+    get:
+      summary: List categories
+      description: Returns the caller's own categories plus system-default categories.
+      tags: [Categories]
+      responses:
+        '200':
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  category:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+    post:
+      summary: Create category
+      tags: [Categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [income, expense]
+                icon:
+                  type: string
+                color:
+                  type: string
+                parent_category_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Created category
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 201
+                  category:
+                    $ref: '#/components/schemas/Category'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/category/{id}:
+    get:
+      summary: Get category
+      tags: [Categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Category
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  category:
+                    $ref: '#/components/schemas/Category'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update category
+      tags: [Categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [income, expense]
+                icon:
+                  type: string
+                color:
+                  type: string
+                parent_category_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Updated category
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  category:
+                    $ref: '#/components/schemas/Category'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete category
+      description: Cannot delete system categories.
+      tags: [Categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Accounts
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/account:
+    get:
+      summary: List accounts
+      tags: [Accounts]
+      responses:
+        '200':
+          description: Account list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  account:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+    post:
+      summary: Create account
+      description: >
+        `currency_code` is inherited from the authenticated user's profile and
+        cannot be set at creation time.
+      tags: [Accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [cash, bank, credit_card, debit_card, investment, loan]
+                initial_balance:
+                  type: number
+                  format: double
+                  default: 0
+                include_in_total:
+                  type: boolean
+                color:
+                  type: string
+                icon:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '201':
+          description: Created account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 201
+                  account:
+                    $ref: '#/components/schemas/Account'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/account/{id}:
+    get:
+      summary: Get account
+      tags: [Accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  account:
+                    $ref: '#/components/schemas/Account'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update account
+      tags: [Accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [cash, bank, credit_card, debit_card, investment, loan]
+                currency_code:
+                  type: string
+                include_in_total:
+                  type: boolean
+                color:
+                  type: string
+                icon:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Updated account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  account:
+                    $ref: '#/components/schemas/Account'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Deactivate account
+      description: Sets `is_active = false`. Does not delete data.
+      tags: [Accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deactivated
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/account/{id}/adjustment:
+    get:
+      summary: List balance adjustments for an account
+      tags: [Accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Adjustment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  adjustment:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccountAdjustment'
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create manual balance adjustment
+      description: Sets the account balance to `new_balance` and records the delta.
+      tags: [Accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_balance, adjustment_date]
+              properties:
+                new_balance:
+                  type: number
+                  format: double
+                reason:
+                  type: string
+                adjustment_date:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Created adjustment
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 201
+                  adjustment:
+                    $ref: '#/components/schemas/AccountAdjustment'
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Adjustments (standalone read-only)
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/adjustment:
+    get:
+      summary: List all adjustments for the current user
+      tags: [Adjustments]
+      responses:
+        '200':
+          description: Adjustment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  adjustment:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccountAdjustment'
+
+  /api/adjustment/{id}:
+    get:
+      summary: Get adjustment
+      tags: [Adjustments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Adjustment
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  adjustment:
+                    $ref: '#/components/schemas/AccountAdjustment'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Transactions
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/transaction:
+    get:
+      summary: List transactions
+      tags: [Transactions]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transaction:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+    post:
+      summary: Create transaction
+      description: Updates `accounts.current_balance` atomically within a DB transaction.
+      tags: [Transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, category_id, type, amount, currency_code, transaction_date, description]
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                category_id:
+                  type: string
+                  format: uuid
+                type:
+                  type: string
+                  enum: [income, expense]
+                amount:
+                  type: number
+                  format: double
+                currency_code:
+                  type: string
+                  example: IDR
+                transaction_date:
+                  type: string
+                  format: date
+                description:
+                  type: string
+                notes:
+                  type: string
+                payee:
+                  type: string
+                location:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                is_recurring:
+                  type: boolean
+                recurring_transaction_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Created transaction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 201
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Account or category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/transaction/{id}:
+    get:
+      summary: Get transaction
+      tags: [Transactions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Transaction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update transaction
+      tags: [Transactions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_id, amount, transaction_date, description]
+              properties:
+                category_id:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+                  format: double
+                transaction_date:
+                  type: string
+                  format: date
+                description:
+                  type: string
+                notes:
+                  type: string
+                payee:
+                  type: string
+                location:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Updated transaction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete transaction
+      description: Reverses the account balance change atomically.
+      tags: [Transactions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/transaction/type/{type}:
+    get:
+      summary: List transactions by type
+      tags: [Transactions]
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [income, expense]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transaction:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+
+  /api/transaction/category/{id}:
+    get:
+      summary: List transactions by category
+      tags: [Transactions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transaction:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+
+  /api/transaction/account/{id}:
+    get:
+      summary: List transactions by account
+      tags: [Transactions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transaction:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+
+  /api/transaction/tags:
+    get:
+      summary: List transactions by tags
+      tags: [Transactions]
+      parameters:
+        - name: tags
+          in: query
+          required: true
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          example: [food, transport]
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transaction:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Attachments
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/transaction/{id}/attachment:
+    get:
+      summary: List attachments for a transaction
+      tags: [Attachments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Attachment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  attachments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+    post:
+      summary: Confirm attachment after direct GCS upload
+      description: >
+        Step 3 of the upload flow. After the client PUT-uploads the file to the
+        signed GCS URL, call this endpoint to record the attachment in the DB.
+      tags: [Attachments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_name, file_path]
+              properties:
+                file_name:
+                  type: string
+                file_path:
+                  type: string
+                  description: GCS object path returned by the upload-url endpoint
+                file_type:
+                  type: string
+                  example: application/pdf
+                file_size:
+                  type: integer
+      responses:
+        '201':
+          description: Created attachment with signed download URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 201
+                  attachment:
+                    $ref: '#/components/schemas/Attachment'
+                  download_url:
+                    type: string
+
+  /api/transaction/{id}/attachment/upload-url:
+    get:
+      summary: Get signed PUT URL for direct upload
+      description: >
+        Step 1 of the upload flow. Returns a signed GCS PUT URL valid for
+        15 minutes. The client uploads directly to GCS — the file never passes
+        through this API server.
+      tags: [Attachments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: file_name
+          in: query
+          required: true
+          schema:
+            type: string
+          example: receipt.pdf
+        - name: file_type
+          in: query
+          required: true
+          schema:
+            type: string
+          example: application/pdf
+      responses:
+        '200':
+          description: Signed upload URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  upload_url:
+                    type: string
+                    description: Signed GCS PUT URL (15-minute expiry)
+                  object_path:
+                    type: string
+                    description: GCS object path to pass to the confirm endpoint
+
+  /api/attachment/{id}:
+    get:
+      summary: Get attachment with signed download URL
+      tags: [Attachments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Attachment with download URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  attachment:
+                    $ref: '#/components/schemas/Attachment'
+                  download_url:
+                    type: string
+                    description: Signed GCS GET URL (1-hour expiry)
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete attachment
+      description: Deletes the GCS object and the DB record.
+      tags: [Attachments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Recurring Transactions
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/recurring:
+    get:
+      summary: List all recurring transactions
+      tags: [Recurring Transactions]
+      responses:
+        '200':
+          description: Recurring transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RecurringTransaction'
+    post:
+      summary: Create recurring transaction
+      tags: [Recurring Transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, type, amount, description, frequency, start_date]
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                category_id:
+                  type: string
+                  format: uuid
+                type:
+                  type: string
+                  enum: [income, expense]
+                amount:
+                  type: number
+                  format: double
+                currency_code:
+                  type: string
+                description:
+                  type: string
+                frequency:
+                  type: string
+                  enum: [daily, weekly, biweekly, monthly, quarterly, yearly]
+                start_date:
+                  type: string
+                  format: date
+                end_date:
+                  type: string
+                  format: date
+                auto_create:
+                  type: boolean
+                  description: >
+                    If true the daily cron creates transactions automatically;
+                    if false a reminder notification is sent instead.
+      responses:
+        '201':
+          description: Created recurring transaction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 201
+                  transaction:
+                    $ref: '#/components/schemas/RecurringTransaction'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/recurring/active:
+    get:
+      summary: List active recurring transactions
+      tags: [Recurring Transactions]
+      responses:
+        '200':
+          description: Active recurring transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RecurringTransaction'
+
+  /api/recurring/{id}:
+    get:
+      summary: Get recurring transaction
+      tags: [Recurring Transactions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recurring transaction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transaction:
+                    $ref: '#/components/schemas/RecurringTransaction'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update recurring transaction
+      description: >
+        `type` and `start_date` are immutable after creation.
+        `account_id`, `description`, and `frequency` are required on update.
+      tags: [Recurring Transactions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, description, frequency]
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                category_id:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+                  format: double
+                description:
+                  type: string
+                frequency:
+                  type: string
+                  enum: [daily, weekly, biweekly, monthly, quarterly, yearly]
+                end_date:
+                  type: string
+                  format: date
+                auto_create:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated recurring transaction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transaction:
+                    $ref: '#/components/schemas/RecurringTransaction'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Deactivate recurring transaction
+      description: Sets `is_active = false`.
+      tags: [Recurring Transactions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deactivated
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Budgets
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/budget:
+    get:
+      summary: List budgets
+      tags: [Budgets]
+      responses:
+        '200':
+          description: Budget list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  budgets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Budget'
+    post:
+      summary: Create budget
+      tags: [Budgets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_id, name, amount, period, start_date]
+              properties:
+                category_id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                amount:
+                  type: number
+                  format: double
+                period:
+                  type: string
+                  enum: [daily, weekly, monthly, quarterly, yearly]
+                start_date:
+                  type: string
+                  format: date
+                end_date:
+                  type: string
+                  format: date
+                alert_threshold:
+                  type: number
+                  format: double
+                  default: 80
+                  description: Percentage at which alerts trigger (1–100)
+      responses:
+        '201':
+          description: Created budget
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 201
+                  budget:
+                    $ref: '#/components/schemas/Budget'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/budget/active:
+    get:
+      summary: List active budgets
+      tags: [Budgets]
+      responses:
+        '200':
+          description: Active budget list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  budgets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Budget'
+
+  /api/budget/spending:
+    get:
+      summary: List budgets with spending for a date range
+      tags: [Budgets]
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Budgets with spending
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  budgets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BudgetWithSpending'
+
+  /api/budget/alerts:
+    get:
+      summary: List budgets exceeding their alert threshold
+      tags: [Budgets]
+      responses:
+        '200':
+          description: Budgets over threshold
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  budgets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BudgetAlert'
+
+  /api/budget/{id}:
+    get:
+      summary: Get budget
+      tags: [Budgets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Budget
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  budget:
+                    $ref: '#/components/schemas/Budget'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update budget
+      description: >
+        `category_id` cannot be changed after creation.
+        `name`, `amount`, `period`, and `start_date` are required.
+      tags: [Budgets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, amount, period, start_date]
+              properties:
+                name:
+                  type: string
+                amount:
+                  type: number
+                  format: double
+                period:
+                  type: string
+                  enum: [daily, weekly, monthly, quarterly, yearly]
+                start_date:
+                  type: string
+                  format: date
+                end_date:
+                  type: string
+                  format: date
+                alert_threshold:
+                  type: number
+                  format: double
+      responses:
+        '200':
+          description: Updated budget
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  budget:
+                    $ref: '#/components/schemas/Budget'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Deactivate budget
+      tags: [Budgets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deactivated
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/budget/{id}/spending:
+    get:
+      summary: Get budget with spending for a date range
+      tags: [Budgets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Budget with spending
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  budget:
+                    $ref: '#/components/schemas/BudgetWithSpending'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Goals
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/goal:
+    get:
+      summary: List all goals
+      tags: [Goals]
+      responses:
+        '200':
+          description: Goal list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  goals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Goal'
+    post:
+      summary: Create goal
+      tags: [Goals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, target_amount, goal_type]
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                description:
+                  type: string
+                goal_type:
+                  type: string
+                  enum: [savings, debt_payoff, investment, purchase, other]
+                target_amount:
+                  type: number
+                  format: double
+                currency_code:
+                  type: string
+                target_date:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Created goal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 201
+                  goal:
+                    $ref: '#/components/schemas/Goal'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/goal/active:
+    get:
+      summary: List active (non-completed) goals
+      tags: [Goals]
+      responses:
+        '200':
+          description: Active goal list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  goals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Goal'
+
+  /api/goal/type/{type}:
+    get:
+      summary: List goals by type
+      tags: [Goals]
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [savings, debt_payoff, investment, purchase, other]
+      responses:
+        '200':
+          description: Goal list filtered by type
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  goals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Goal'
+
+  /api/goal/{id}:
+    get:
+      summary: Get goal
+      tags: [Goals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Goal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  goal:
+                    $ref: '#/components/schemas/Goal'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update goal
+      tags: [Goals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, goal_type, target_amount]
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                description:
+                  type: string
+                goal_type:
+                  type: string
+                  enum: [savings, debt_payoff, investment, purchase, other]
+                target_amount:
+                  type: number
+                  format: double
+                target_date:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Updated goal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  goal:
+                    $ref: '#/components/schemas/Goal'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete goal
+      tags: [Goals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/goal/{id}/progress:
+    get:
+      summary: Get goal with progress details
+      tags: [Goals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Goal progress
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  progress:
+                    $ref: '#/components/schemas/GoalProgress'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/goal/{id}/contribute:
+    patch:
+      summary: Add contribution to goal
+      tags: [Goals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: number
+                  format: double
+      responses:
+        '200':
+          description: Updated goal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  goal:
+                    $ref: '#/components/schemas/Goal'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/goal/{id}/complete:
+    patch:
+      summary: Mark goal as completed
+      tags: [Goals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Completed goal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  goal:
+                    $ref: '#/components/schemas/Goal'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Transfers
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/transfer:
+    get:
+      summary: List transfers
+      tags: [Transfers]
+      responses:
+        '200':
+          description: Transfer list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transfer:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transfer'
+    post:
+      summary: Create transfer between accounts
+      description: Updates both account balances atomically.
+      tags: [Transfers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from_account_id, to_account_id, amount, transfer_date]
+              properties:
+                from_account_id:
+                  type: string
+                  format: uuid
+                to_account_id:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+                  format: double
+                to_amount:
+                  type: number
+                  format: double
+                  description: Amount received in destination currency (defaults to `amount` if same currency)
+                exchange_rate:
+                  type: number
+                  format: double
+                  description: Defaults to 1.0
+                transfer_date:
+                  type: string
+                  format: date
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Created transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 201
+                  transfer:
+                    $ref: '#/components/schemas/Transfer'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/transfer/{id}:
+    get:
+      summary: Get transfer
+      tags: [Transfers]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transfer:
+                    $ref: '#/components/schemas/Transfer'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete transfer
+      description: Reverses both account balance changes atomically.
+      tags: [Transfers]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/transfer/account/{id}:
+    get:
+      summary: List transfers for an account
+      tags: [Transfers]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Transfer list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  transfer:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transfer'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Notifications
+  # ────────────────────────────────────────────────────────────────────────────
+  /api/notification:
+    get:
+      summary: List notifications (paginated)
+      tags: [Notifications]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  notifications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+                  unread_count:
+                    type: integer
+    delete:
+      summary: Delete all read notifications
+      tags: [Notifications]
+      responses:
+        '204':
+          description: Deleted
+
+  /api/notification/unread:
+    get:
+      summary: List unread notifications
+      tags: [Notifications]
+      responses:
+        '200':
+          description: Unread notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  notifications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+                  unread_count:
+                    type: integer
+
+  /api/notification/read-all:
+    patch:
+      summary: Mark all notifications as read
+      tags: [Notifications]
+      responses:
+        '204':
+          description: Marked as read
+
+  /api/notification/{id}:
+    delete:
+      summary: Delete notification
+      tags: [Notifications]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/notification/{id}/read:
+    patch:
+      summary: Mark notification as read
+      tags: [Notifications]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Marked as read
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
