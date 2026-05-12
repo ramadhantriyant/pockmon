@@ -1,6 +1,8 @@
 package util
 
 import (
+	"strconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -26,7 +28,7 @@ func GetUUID(id string) (pgtype.UUID, error) {
 
 func GetNumeric(f float64) (pgtype.Numeric, error) {
 	var n pgtype.Numeric
-	err := n.Scan(f)
+	err := n.Scan(strconv.FormatFloat(f, 'f', -1, 64))
 
 	return n, err
 }

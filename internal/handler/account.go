@@ -105,7 +105,7 @@ func (h *Handler) CreateAccount(c *gin.Context) {
 
 	var newAccount struct {
 		Name           string  `json:"name" binding:"required"`
-		Type           string  `json:"type" binding:"required"`
+		Type           string  `json:"type" binding:"required,oneof=cash bank credit_card debit_card investment loan"`
 		InitialBalance float64 `json:"initial_balance"`
 		IncludeInTotal *bool   `json:"include_in_total"`
 		Color          *string `json:"color"`
@@ -195,9 +195,9 @@ func (h *Handler) UpdateAccount(c *gin.Context) {
 
 	var editedAccount struct {
 		Name            string  `json:"name" binding:"required"`
-		Type            string  `json:"type" binding:"required"`
+		Type            string  `json:"type" binding:"required,oneof=cash bank credit_card debit_card investment loan"`
 		CurrencyCode    *string `json:"currency_code"`
-		IncludedInTotal *bool   `json:"included_in_total"`
+		IncludedInTotal *bool   `json:"include_in_total"`
 		Color           *string `json:"color"`
 		Icon            *string `json:"icon"`
 		Notes           *string `json:"notes"`
