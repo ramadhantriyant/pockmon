@@ -142,6 +142,7 @@ type Transaction struct {
 	RecurringTransactionID pgtype.UUID      `json:"recurring_transaction_id"`
 	CreatedAt              pgtype.Timestamp `json:"created_at"`
 	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	TransferID             pgtype.UUID      `json:"transfer_id"`
 }
 
 type Transfer struct {

@@ -30,7 +30,7 @@ INSERT INTO transactions (
     payee, location, tags, is_recurring, recurring_transaction_id
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-RETURNING id, user_id, account_id, category_id, type, amount, currency_code, transaction_date, description, notes, payee, location, tags, is_recurring, recurring_transaction_id, created_at, updated_at
+RETURNING id, user_id, account_id, category_id, type, amount, currency_code, transaction_date, description, notes, payee, location, tags, is_recurring, recurring_transaction_id, created_at, updated_at, transfer_id
 `
 
 type CreateTransactionParams struct {
@@ -88,6 +88,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		&i.RecurringTransactionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TransferID,
 	)
 	return i, err
 }
@@ -210,7 +211,7 @@ func (q *Queries) GetMonthlySpendingByCategory(ctx context.Context, arg GetMonth
 }
 
 const getTransactionByID = `-- name: GetTransactionByID :one
-SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, c.name AS category_name, a.name AS account_name
+SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, t.transfer_id, c.name AS category_name, a.name AS account_name
 FROM transactions t
 LEFT JOIN categories c ON t.category_id = c.id
 LEFT JOIN accounts a ON t.account_id = a.id
@@ -240,6 +241,7 @@ type GetTransactionByIDRow struct {
 	RecurringTransactionID pgtype.UUID      `json:"recurring_transaction_id"`
 	CreatedAt              pgtype.Timestamp `json:"created_at"`
 	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	TransferID             pgtype.UUID      `json:"transfer_id"`
 	CategoryName           *string          `json:"category_name"`
 	AccountName            *string          `json:"account_name"`
 }
@@ -265,6 +267,7 @@ func (q *Queries) GetTransactionByID(ctx context.Context, arg GetTransactionByID
 		&i.RecurringTransactionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TransferID,
 		&i.CategoryName,
 		&i.AccountName,
 	)
@@ -301,7 +304,7 @@ func (q *Queries) GetTransactionSummaryByDateRange(ctx context.Context, arg GetT
 }
 
 const listTransactionsByAccount = `-- name: ListTransactionsByAccount :many
-SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, c.name AS category_name
+SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, t.transfer_id, c.name AS category_name
 FROM transactions t
 LEFT JOIN categories c ON t.category_id = c.id
 WHERE t.user_id = $1 AND t.account_id = $2
@@ -334,6 +337,7 @@ type ListTransactionsByAccountRow struct {
 	RecurringTransactionID pgtype.UUID      `json:"recurring_transaction_id"`
 	CreatedAt              pgtype.Timestamp `json:"created_at"`
 	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	TransferID             pgtype.UUID      `json:"transfer_id"`
 	CategoryName           *string          `json:"category_name"`
 }
 
@@ -369,6 +373,7 @@ func (q *Queries) ListTransactionsByAccount(ctx context.Context, arg ListTransac
 			&i.RecurringTransactionID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TransferID,
 			&i.CategoryName,
 		); err != nil {
 			return nil, err
@@ -382,7 +387,7 @@ func (q *Queries) ListTransactionsByAccount(ctx context.Context, arg ListTransac
 }
 
 const listTransactionsByCategory = `-- name: ListTransactionsByCategory :many
-SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, a.name AS account_name
+SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, t.transfer_id, a.name AS account_name
 FROM transactions t
 LEFT JOIN accounts a ON t.account_id = a.id
 WHERE t.user_id = $1 AND t.category_id = $2
@@ -415,6 +420,7 @@ type ListTransactionsByCategoryRow struct {
 	RecurringTransactionID pgtype.UUID      `json:"recurring_transaction_id"`
 	CreatedAt              pgtype.Timestamp `json:"created_at"`
 	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	TransferID             pgtype.UUID      `json:"transfer_id"`
 	AccountName            *string          `json:"account_name"`
 }
 
@@ -450,6 +456,7 @@ func (q *Queries) ListTransactionsByCategory(ctx context.Context, arg ListTransa
 			&i.RecurringTransactionID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TransferID,
 			&i.AccountName,
 		); err != nil {
 			return nil, err
@@ -463,7 +470,7 @@ func (q *Queries) ListTransactionsByCategory(ctx context.Context, arg ListTransa
 }
 
 const listTransactionsByDateRange = `-- name: ListTransactionsByDateRange :many
-SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, c.name AS category_name, a.name AS account_name
+SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, t.transfer_id, c.name AS category_name, a.name AS account_name
 FROM transactions t
 LEFT JOIN categories c ON t.category_id = c.id
 LEFT JOIN accounts a ON t.account_id = a.id
@@ -499,6 +506,7 @@ type ListTransactionsByDateRangeRow struct {
 	RecurringTransactionID pgtype.UUID      `json:"recurring_transaction_id"`
 	CreatedAt              pgtype.Timestamp `json:"created_at"`
 	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	TransferID             pgtype.UUID      `json:"transfer_id"`
 	CategoryName           *string          `json:"category_name"`
 	AccountName            *string          `json:"account_name"`
 }
@@ -536,6 +544,7 @@ func (q *Queries) ListTransactionsByDateRange(ctx context.Context, arg ListTrans
 			&i.RecurringTransactionID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TransferID,
 			&i.CategoryName,
 			&i.AccountName,
 		); err != nil {
@@ -550,7 +559,7 @@ func (q *Queries) ListTransactionsByDateRange(ctx context.Context, arg ListTrans
 }
 
 const listTransactionsByTag = `-- name: ListTransactionsByTag :many
-SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, c.name AS category_name, a.name AS account_name
+SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, t.transfer_id, c.name AS category_name, a.name AS account_name
 FROM transactions t
 LEFT JOIN categories c ON t.category_id = c.id
 LEFT JOIN accounts a ON t.account_id = a.id
@@ -584,6 +593,7 @@ type ListTransactionsByTagRow struct {
 	RecurringTransactionID pgtype.UUID      `json:"recurring_transaction_id"`
 	CreatedAt              pgtype.Timestamp `json:"created_at"`
 	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	TransferID             pgtype.UUID      `json:"transfer_id"`
 	CategoryName           *string          `json:"category_name"`
 	AccountName            *string          `json:"account_name"`
 }
@@ -620,6 +630,7 @@ func (q *Queries) ListTransactionsByTag(ctx context.Context, arg ListTransaction
 			&i.RecurringTransactionID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TransferID,
 			&i.CategoryName,
 			&i.AccountName,
 		); err != nil {
@@ -634,7 +645,7 @@ func (q *Queries) ListTransactionsByTag(ctx context.Context, arg ListTransaction
 }
 
 const listTransactionsByType = `-- name: ListTransactionsByType :many
-SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, c.name AS category_name, a.name AS account_name
+SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, t.transfer_id, c.name AS category_name, a.name AS account_name
 FROM transactions t
 LEFT JOIN categories c ON t.category_id = c.id
 LEFT JOIN accounts a ON t.account_id = a.id
@@ -668,6 +679,7 @@ type ListTransactionsByTypeRow struct {
 	RecurringTransactionID pgtype.UUID      `json:"recurring_transaction_id"`
 	CreatedAt              pgtype.Timestamp `json:"created_at"`
 	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	TransferID             pgtype.UUID      `json:"transfer_id"`
 	CategoryName           *string          `json:"category_name"`
 	AccountName            *string          `json:"account_name"`
 }
@@ -704,6 +716,7 @@ func (q *Queries) ListTransactionsByType(ctx context.Context, arg ListTransactio
 			&i.RecurringTransactionID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TransferID,
 			&i.CategoryName,
 			&i.AccountName,
 		); err != nil {
@@ -718,7 +731,7 @@ func (q *Queries) ListTransactionsByType(ctx context.Context, arg ListTransactio
 }
 
 const listTransactionsByUser = `-- name: ListTransactionsByUser :many
-SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, c.name AS category_name, a.name AS account_name
+SELECT t.id, t.user_id, t.account_id, t.category_id, t.type, t.amount, t.currency_code, t.transaction_date, t.description, t.notes, t.payee, t.location, t.tags, t.is_recurring, t.recurring_transaction_id, t.created_at, t.updated_at, t.transfer_id, c.name AS category_name, a.name AS account_name
 FROM transactions t
 LEFT JOIN categories c ON t.category_id = c.id
 LEFT JOIN accounts a ON t.account_id = a.id
@@ -751,6 +764,7 @@ type ListTransactionsByUserRow struct {
 	RecurringTransactionID pgtype.UUID      `json:"recurring_transaction_id"`
 	CreatedAt              pgtype.Timestamp `json:"created_at"`
 	UpdatedAt              pgtype.Timestamp `json:"updated_at"`
+	TransferID             pgtype.UUID      `json:"transfer_id"`
 	CategoryName           *string          `json:"category_name"`
 	AccountName            *string          `json:"account_name"`
 }
@@ -782,6 +796,7 @@ func (q *Queries) ListTransactionsByUser(ctx context.Context, arg ListTransactio
 			&i.RecurringTransactionID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TransferID,
 			&i.CategoryName,
 			&i.AccountName,
 		); err != nil {
@@ -793,6 +808,20 @@ func (q *Queries) ListTransactionsByUser(ctx context.Context, arg ListTransactio
 		return nil, err
 	}
 	return items, nil
+}
+
+const setTransactionTransferID = `-- name: SetTransactionTransferID :exec
+UPDATE transactions SET transfer_id = $2 WHERE id = $1
+`
+
+type SetTransactionTransferIDParams struct {
+	ID         pgtype.UUID `json:"id"`
+	TransferID pgtype.UUID `json:"transfer_id"`
+}
+
+func (q *Queries) SetTransactionTransferID(ctx context.Context, arg SetTransactionTransferIDParams) error {
+	_, err := q.db.Exec(ctx, setTransactionTransferID, arg.ID, arg.TransferID)
+	return err
 }
 
 const updateTransaction = `-- name: UpdateTransaction :one
@@ -807,7 +836,7 @@ SET category_id = $2,
     tags = $9,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1 AND user_id = $10
-RETURNING id, user_id, account_id, category_id, type, amount, currency_code, transaction_date, description, notes, payee, location, tags, is_recurring, recurring_transaction_id, created_at, updated_at
+RETURNING id, user_id, account_id, category_id, type, amount, currency_code, transaction_date, description, notes, payee, location, tags, is_recurring, recurring_transaction_id, created_at, updated_at, transfer_id
 `
 
 type UpdateTransactionParams struct {
@@ -855,6 +884,7 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		&i.RecurringTransactionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TransferID,
 	)
 	return i, err
 }

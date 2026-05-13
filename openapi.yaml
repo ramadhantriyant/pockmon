@@ -258,6 +258,14 @@ components:
           type: string
           format: uuid
           nullable: true
+        transfer_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Set when this transaction is a leg of a transfer.
+            Both the expense (source) and income (destination) transactions
+            of a transfer share the same transfer_id.
         created_at:
           type: string
           format: date-time

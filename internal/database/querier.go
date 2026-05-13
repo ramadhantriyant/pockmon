@@ -99,6 +99,7 @@ type Querier interface {
 	MarkAllNotificationsAsRead(ctx context.Context, userID pgtype.UUID) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) error
 	SetSystemCategory(ctx context.Context, arg SetSystemCategoryParams) error
+	SetTransactionTransferID(ctx context.Context, arg SetTransactionTransferIDParams) error
 	SetUserAdmin(ctx context.Context, arg SetUserAdminParams) error
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (Account, error)
 	UpdateAccountBalance(ctx context.Context, arg UpdateAccountBalanceParams) (Account, error)

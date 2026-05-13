@@ -85,6 +85,9 @@ RETURNING *;
 DELETE FROM transactions
 WHERE id = $1 AND user_id = $2;
 
+-- name: SetTransactionTransferID :exec
+UPDATE transactions SET transfer_id = $2 WHERE id = $1;
+
 -- name: GetMonthlySpendingByCategory :many
 SELECT
     c.id AS category_id,

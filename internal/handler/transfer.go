@@ -544,6 +544,30 @@ func (h *Handler) CreateTransfer(c *gin.Context) {
 		return
 	}
 
+	if err := q.SetTransactionTransferID(c.Request.Context(), database.SetTransactionTransferIDParams{
+		ID:         fromTx.ID,
+		TransferID: transferID,
+	}); err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
+	if err := q.SetTransactionTransferID(c.Request.Context(), database.SetTransactionTransferIDParams{
+		ID:         toTx.ID,
+		TransferID: transferID,
+	}); err != nil {
+		c.Error(&gin.Error{
+			Err:  middleware.NewAppError(http.StatusInternalServerError, "internal server error", "internal server error").WithInternal(err.Error()),
+			Type: gin.ErrorTypePublic,
+		})
+		c.Abort()
+		return
+	}
+
 	if _, err = q.UpdateAccountBalance(c.Request.Context(), database.UpdateAccountBalanceParams{
 		ID:             fromAccountID,
 		CurrentBalance: fromNewBalance,
